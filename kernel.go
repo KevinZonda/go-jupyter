@@ -3,12 +3,12 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"os/exec"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -17,9 +17,11 @@ import (
 
 	"github.com/cosmos72/gomacro/base"
 	interp "github.com/cosmos72/gomacro/fast"
-	mp "github.com/cosmos72/gomacro/go/parser"
 	"github.com/cosmos72/gomacro/xreflect"
 )
+
+// ProtocolVersion defines the Jupyter protocol version.
+const ProtocolVersion string = "5.0"
 
 // ExecCounter is incremented each time we run user code in the notebook.
 var ExecCounter int
@@ -73,7 +75,7 @@ type helpLink struct {
 }
 
 // KernelInfo holds information about the igo kernel, for kernel_info_reply messages.
-type kernelInfo struct {
+type KernelInfo struct {
 	ProtocolVersion       string             `json:"protocol_version"`
 	Implementation        string             `json:"implementation"`
 	ImplementationVersion string             `json:"implementation_version"`
@@ -112,10 +114,11 @@ type Kernel struct {
 	// map name -> HTMLer, JSONer, Renderer...
 	// used to convert interpreted types to one of these interfaces
 	render map[string]xreflect.Type
+	info   KernelInfo
 }
 
 // runKernel is the main entry point to start the kernel.
-func RunKernel(connInfo ConnectionInfo) {
+func RunKernel(connInfo ConnectionInfo, ki KernelInfo) {
 
 	// Create a new interpreter for evaluating notebook code.
 	ir := interp.New()
@@ -179,6 +182,7 @@ func RunKernel(connInfo ConnectionInfo) {
 		ir,
 		display,
 		nil,
+		ki,
 	}
 	kernel.initRenderers()
 
@@ -317,7 +321,7 @@ func (kernel *Kernel) handleShellMsg(receipt msgReceipt) {
 
 	switch receipt.Msg.Header.MsgType {
 	case "kernel_info_request":
-		if err := sendKernelInfo(receipt); err != nil {
+		if err := sendKernelInfo(receipt, kernel.info); err != nil {
 			log.Fatal(err)
 		}
 	case "is_complete_request":
@@ -340,24 +344,8 @@ func (kernel *Kernel) handleShellMsg(receipt msgReceipt) {
 }
 
 // sendKernelInfo sends a kernel_info_reply message.
-func sendKernelInfo(receipt msgReceipt) error {
-	return receipt.Reply("kernel_info_reply",
-		kernelInfo{
-			ProtocolVersion:       ProtocolVersion,
-			Implementation:        "gophernotes",
-			ImplementationVersion: Version,
-			Banner:                fmt.Sprintf("Go kernel: gophernotes - v%s", Version),
-			LanguageInfo: kernelLanguageInfo{
-				Name:          "go",
-				Version:       runtime.Version(),
-				FileExtension: ".go",
-			},
-			HelpLinks: []helpLink{
-				{Text: "Go", URL: "https://golang.org/"},
-				{Text: "gophernotes", URL: "https://github.com/gopherdata/gophernotes"},
-			},
-		},
-	)
+func sendKernelInfo(receipt msgReceipt, info KernelInfo) error {
+	return receipt.Reply("kernel_info_reply", info)
 }
 
 // checkComplete checks whether the `code` is complete or not.
@@ -372,25 +360,12 @@ func checkComplete(code string, ir *interp.Interp) (status, indent string) {
 		_, _, err := base.ReadMultiline(readline, base.ReadOptions(0), "")
 		if err == io.EOF {
 			return "complete", indent
-		} else if err == io.ErrUnexpectedEOF {
+		} else if errors.Is(err, io.ErrUnexpectedEOF) {
 			return "incomplete", indent
 		} else if err != nil {
 			return "invalid", indent
 		}
 	}
-
-	var parser mp.Parser
-	g := ir.Comp
-	parser.Configure(g.ParserMode, g.MacroChar)
-	parser.Init(g.Fileset, g.Filepath, g.Line, []byte(code))
-
-	_, err := parser.Parse()
-	if err != nil {
-		status = "invalid"
-	} else {
-		status = "complete"
-	}
-	return status, indent
 }
 
 // handleIsCompleteRequest sends a is_complete_reply message.

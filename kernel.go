@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -24,9 +23,6 @@ import (
 	interp "github.com/cosmos72/gomacro/fast"
 	mp "github.com/cosmos72/gomacro/go/parser"
 	"github.com/cosmos72/gomacro/xreflect"
-
-	// compile and link files generated in imports/
-	_ "github.com/gopherdata/gophernotes/imports"
 )
 
 // ExecCounter is incremented each time we run user code in the notebook.
@@ -123,7 +119,7 @@ type Kernel struct {
 }
 
 // runKernel is the main entry point to start the kernel.
-func runKernel(connectionFile string) {
+func RunKernel(connInfo ConnectionInfo) {
 
 	// Create a new interpreter for evaluating notebook code.
 	ir := interp.New()
@@ -140,18 +136,6 @@ func runKernel(connectionFile string) {
 	// instead of a function, because we want to later change
 	// its value to the closure that holds a reference to msgReceipt
 	ir.DeclVar("Display", nil, stubDisplay)
-
-	// Parse the connection info.
-	var connInfo ConnectionInfo
-
-	connData, err := ioutil.ReadFile(connectionFile)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if err = json.Unmarshal(connData, &connInfo); err != nil {
-		log.Fatal(err)
-	}
 
 	// Set up the ZMQ sockets through which the kernel will communicate.
 	sockets, err := prepareSockets(connInfo)

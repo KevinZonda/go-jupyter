@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"log"
+	"os"
 )
 
 const (
@@ -22,6 +24,17 @@ func main() {
 		log.Fatalln("Need a command line argument specifying the connection file.")
 	}
 
+	var connInfo ConnectionInfo
+
+	connData, err := os.ReadFile(flag.Arg(0))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err = json.Unmarshal(connData, &connInfo); err != nil {
+		log.Fatal(err)
+	}
+
 	// Run the kernel.
-	runKernel(flag.Arg(0))
+	RunKernel(connInfo)
 }

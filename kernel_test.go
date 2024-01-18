@@ -61,7 +61,7 @@ func runTest(m *testing.M) int {
 	iopubPort = connInfo.IOPubPort
 
 	// Start the kernel.
-	go runKernel(connectionFile)
+	go RunKernel(connInfo)
 
 	return m.Run()
 }

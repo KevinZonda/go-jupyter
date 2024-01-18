@@ -3,10 +3,8 @@ package main
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -17,9 +15,7 @@ import (
 
 	"github.com/go-zeromq/zmq4"
 
-	"github.com/cosmos72/gomacro/ast2"
 	"github.com/cosmos72/gomacro/base"
-	basereflect "github.com/cosmos72/gomacro/base/reflect"
 	interp "github.com/cosmos72/gomacro/fast"
 	mp "github.com/cosmos72/gomacro/go/parser"
 	"github.com/cosmos72/gomacro/xreflect"
@@ -125,8 +121,8 @@ func RunKernel(connInfo ConnectionInfo) {
 	ir := interp.New()
 
 	// Throw out the error/warning messages that gomacro outputs writes to these streams.
-	ir.Comp.Stdout = ioutil.Discard
-	ir.Comp.Stderr = ioutil.Discard
+	ir.Comp.Stdout = io.Discard
+	ir.Comp.Stderr = io.Discard
 
 	// Inject the "display" package to render HTML, JSON, PNG, JPEG, SVG... from interpreted code
 	// maybe a dot-import is easier to use?
@@ -519,60 +515,6 @@ func (kernel *Kernel) handleExecuteRequest(receipt msgReceipt) error {
 	return receipt.Reply("execute_reply", content)
 }
 
-// doEval evaluates the code in the interpreter. This function captures an uncaught panic
-// as well as the values of the last statement/expression.
-func doEval(ir *interp.Interp, outerr OutErr, code string) (val []interface{}, typ []xreflect.Type, err error) {
-
-	// Capture a panic from the evaluation if one occurs and store it in the `err` return parameter.
-	defer func() {
-		if r := recover(); r != nil {
-			var ok bool
-			if err, ok = r.(error); !ok {
-				err = errors.New(fmt.Sprint(r))
-			}
-		}
-	}()
-
-	code = evalSpecialCommands(ir, outerr, code)
-
-	// Prepare and perform the multiline evaluation.
-	compiler := ir.Comp
-
-	// Don't show the gomacro prompt.
-	compiler.Options &^= base.OptShowPrompt
-
-	// Don't swallow panics as they are recovered above and handled with a Jupyter `error` message instead.
-	compiler.Options &^= base.OptTrapPanic
-
-	// Reset the error line so that error messages correspond to the lines from the cell.
-	compiler.Line = 0
-
-	// Parse the input code (and don't perform gomacro's macroexpansion).
-	// These may panic but this will be recovered by the deferred recover() above so that the error
-	// may be returned instead.
-	nodes := compiler.ParseBytes([]byte(code))
-	srcAst := ast2.AnyToAst(nodes, "doEval")
-
-	// If there is no srcAst then we must be evaluating nothing. The result must be nil then.
-	if srcAst == nil {
-		return nil, nil, nil
-	}
-
-	// Compile the ast.
-	compiledSrc := ir.CompileAst(srcAst)
-
-	// Evaluate the code.
-	results, types := ir.RunExpr(compiledSrc)
-
-	// Convert results from xreflect.Value to interface{}
-	values := make([]interface{}, len(results))
-	for i, result := range results {
-		values[i] = basereflect.ValueInterface(result)
-	}
-
-	return values, types, nil
-}
-
 // handleShutdownRequest sends a "shutdown" message.
 func handleShutdownRequest(receipt msgReceipt) {
 	content := receipt.Msg.Content.(map[string]interface{})
@@ -653,7 +595,7 @@ func startHeartbeat(hbSocket Socket, wg *sync.WaitGroup) (shutdown chan struct{}
 }
 
 // find and execute special commands in code, remove them from returned string
-func evalSpecialCommands(ir *interp.Interp, outerr OutErr, code string) string {
+func evalSpecialCommands(outerr OutErr, code string) string {
 	lines := strings.Split(code, "\n")
 	stop := false
 	for i, line := range lines {
@@ -661,10 +603,10 @@ func evalSpecialCommands(ir *interp.Interp, outerr OutErr, code string) string {
 		if len(line) != 0 {
 			switch line[0] {
 			case '%':
-				evalSpecialCommand(ir, outerr, line)
+				evalSpecialCommand(outerr, line)
 				lines[i] = ""
-			case '$':
-				evalShellCommand(ir, outerr, line)
+			case '$', '!':
+				evalShellCommand(outerr, line)
 				lines[i] = ""
 			default:
 				// if a line is NOT a special command,
@@ -680,14 +622,13 @@ func evalSpecialCommands(ir *interp.Interp, outerr OutErr, code string) string {
 }
 
 // execute special command. line must start with '%'
-func evalSpecialCommand(ir *interp.Interp, outerr OutErr, line string) {
+func evalSpecialCommand(outerr OutErr, line string) {
 	const help string = `
 available special commands (%):
 %cd [path]
-%go111module {on|off}
 %help
 
-execute shell commands ($): $command [args...]
+execute shell commands ($/!): $command [args...]
 example:
 $ls -l
 `
@@ -711,14 +652,6 @@ $ls -l
 		if err != nil {
 			panic(fmt.Errorf("error setting current directory to %q: %v", arg, err))
 		}
-	case "%go111module":
-		if arg == "on" {
-			ir.Comp.CompGlobals.Options |= base.OptModuleImport
-		} else if arg == "off" {
-			ir.Comp.CompGlobals.Options &^= base.OptModuleImport
-		} else {
-			panic(fmt.Errorf("special command %s: expecting a single argument 'on' or 'off', found: %q", cmd, arg))
-		}
 	case "%help":
 		outerr.out.Write([]byte(help))
 	default:
@@ -726,8 +659,8 @@ $ls -l
 	}
 }
 
-// execute shell command. line must start with '$'
-func evalShellCommand(ir *interp.Interp, outerr OutErr, line string) {
+// execute shell command. line must start with '!' or '$'
+func evalShellCommand(outerr OutErr, line string) {
 	args := strings.Fields(line[1:])
 	if len(args) <= 0 {
 		return

@@ -1,3 +1,9 @@
 gophernotes
 .ipynb_checkpoints
 Untitled*.ipynb
+
+*.exe
+*.exe~
+
+.idea/
+.vscode/

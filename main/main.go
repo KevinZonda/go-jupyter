@@ -31,19 +31,33 @@ func main() {
 	}
 
 	// Run the kernel.
-	jupyter.RunKernel(connInfo, jupyter.KernelInfo{
+	jupyter.RunKernel(miniInterpreter{}, connInfo, jupyter.KernelInfo{
 		ProtocolVersion:       jupyter.ProtocolVersion,
-		Implementation:        "gophernotes",
+		Implementation:        "Mini Kernel",
 		ImplementationVersion: Version,
-		Banner:                fmt.Sprintf("Go kernel: gophernotes - v%s", Version),
+		Banner:                fmt.Sprintf("Go kernel: minikernel - v%s", Version),
 		LanguageInfo: jupyter.KernelLanguageInfo{
-			Name:          "go",
+			Name:          "minikernel",
 			Version:       runtime.Version(),
-			FileExtension: ".go",
+			FileExtension: ".mini",
 		},
 		HelpLinks: []jupyter.KernelInfoHelpLink{
 			{Text: "Go", URL: "https://golang.org/"},
 			{Text: "gophernotes", URL: "https://github.com/gopherdata/gophernotes"},
 		},
 	})
+}
+
+type miniInterpreter struct{}
+
+func (miniInterpreter) CompleteWords(code string, cursorPos int) (prefix string, completions []string, tail string) {
+	return "", nil, ""
+}
+
+func (miniInterpreter) Eval(code string) (values []interface{}, err error) {
+	return []interface{}{code}, nil
+}
+
+func (miniInterpreter) Close() error {
+	return nil
 }

@@ -16,8 +16,6 @@ import (
 	"github.com/go-zeromq/zmq4"
 
 	"github.com/cosmos72/gomacro/base"
-	interp "github.com/cosmos72/gomacro/fast"
-	"github.com/cosmos72/gomacro/xreflect"
 )
 
 // ProtocolVersion defines the Jupyter protocol version.
@@ -109,32 +107,16 @@ func (s *Socket) RunWithSocket(run func(socket zmq4.Socket) error) error {
 }
 
 type Kernel struct {
-	ir      *interp.Interp
-	display *interp.Import
-	// map name -> HTMLer, JSONer, Renderer...
-	// used to convert interpreted types to one of these interfaces
-	render map[string]xreflect.Type
-	info   KernelInfo
+	ir   Interpreter
+	info KernelInfo
 }
 
-// runKernel is the main entry point to start the kernel.
-func RunKernel(connInfo ConnectionInfo, ki KernelInfo) {
+func RunKernel(ir Interpreter, connInfo ConnectionInfo, ki KernelInfo) {
 
 	// Create a new interpreter for evaluating notebook code.
-	ir := interp.New()
-
 	// Throw out the error/warning messages that gomacro outputs writes to these streams.
-	ir.Comp.Stdout = io.Discard
-	ir.Comp.Stderr = io.Discard
-
-	// Inject the "display" package to render HTML, JSON, PNG, JPEG, SVG... from interpreted code
-	// maybe a dot-import is easier to use?
-	display := importPackage(ir, "display", "display")
-
-	// Inject the stub "Display" function. declare a variable
-	// instead of a function, because we want to later change
-	// its value to the closure that holds a reference to msgReceipt
-	ir.DeclVar("Display", nil, stubDisplay)
+	//ir.Comp.Stdout = io.Discard
+	//ir.Comp.Stderr = io.Discard
 
 	// Set up the ZMQ sockets through which the kernel will communicate.
 	sockets, err := prepareSockets(connInfo)
@@ -180,11 +162,8 @@ func RunKernel(connInfo ConnectionInfo, ki KernelInfo) {
 
 	kernel := Kernel{
 		ir,
-		display,
-		nil,
 		ki,
 	}
-	kernel.initRenderers()
 
 	// Start a message receiving loop.
 	for {
@@ -223,17 +202,6 @@ func RunKernel(connInfo ConnectionInfo, ki KernelInfo) {
 			kernel.handleShellMsg(msgReceipt{msg, ids, sockets})
 		}
 	}
-}
-
-func importPackage(ir *interp.Interp, path string, alias string) *interp.Import {
-	packages, err := ir.ImportPackagesOrError(
-		map[string]interp.PackageName{
-			path: interp.PackageName(alias),
-		})
-	if err != nil {
-		log.Print(err)
-	}
-	return packages[path]
 }
 
 // prepareSockets sets up the ZMQ sockets through which the kernel
@@ -349,7 +317,7 @@ func sendKernelInfo(receipt msgReceipt, info KernelInfo) error {
 }
 
 // checkComplete checks whether the `code` is complete or not.
-func checkComplete(code string, ir *interp.Interp) (status, indent string) {
+func checkComplete(code string) (status, indent string) {
 	status, indent = "unknown", ""
 
 	if len(code) == 0 {
@@ -377,7 +345,7 @@ func (kernel *Kernel) handleIsCompleteRequest(receipt msgReceipt) error {
 	// Extract the data from the request.
 	reqcontent := receipt.Msg.Content.(map[string]interface{})
 	code := reqcontent["code"].(string)
-	status, indent := checkComplete(code, kernel.ir)
+	status, indent := checkComplete(code)
 
 	return receipt.Reply("is_complete_reply",
 		isCompleteReply{
@@ -445,15 +413,9 @@ func (kernel *Kernel) handleExecuteRequest(receipt msgReceipt) error {
 
 	// inject the actual "Display" closure that displays multimedia data in Jupyter
 	ir := kernel.ir
-	displayPlace := ir.ValueOf("Display")
-	displayPlace.Set(xreflect.ValueOf(receipt.PublishDisplayData))
-	defer func() {
-		// remove the closure before returning
-		displayPlace.Set(xreflect.ValueOf(stubDisplay))
-	}()
 
 	// eval
-	vals, types, executionErr := doEval(ir, outerr, code)
+	vals, executionErr := doEval(ir, outerr, code)
 
 	// Close and restore the streams.
 	wOut.Close()
@@ -467,7 +429,7 @@ func (kernel *Kernel) handleExecuteRequest(receipt msgReceipt) error {
 
 	if executionErr == nil {
 		// if the only non-nil value should be auto-rendered graphically, render it
-		data := kernel.autoRenderResults(vals, types)
+		data := kernel.autoRenderResults(vals)
 
 		content["status"] = "ok"
 		content["user_expressions"] = make(map[string]string)

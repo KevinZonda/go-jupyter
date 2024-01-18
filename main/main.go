@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/KevinZonda/go-jupyter"
 	"log"
 	"os"
 	"runtime"
@@ -18,7 +19,7 @@ func main() {
 		log.Fatalln("Need a command line argument specifying the connection file.")
 	}
 
-	var connInfo ConnectionInfo
+	var connInfo jupyter.ConnectionInfo
 
 	connData, err := os.ReadFile(flag.Arg(0))
 	if err != nil {
@@ -30,17 +31,17 @@ func main() {
 	}
 
 	// Run the kernel.
-	RunKernel(connInfo, KernelInfo{
-		ProtocolVersion:       ProtocolVersion,
+	jupyter.RunKernel(connInfo, jupyter.KernelInfo{
+		ProtocolVersion:       jupyter.ProtocolVersion,
 		Implementation:        "gophernotes",
 		ImplementationVersion: Version,
 		Banner:                fmt.Sprintf("Go kernel: gophernotes - v%s", Version),
-		LanguageInfo: kernelLanguageInfo{
+		LanguageInfo: jupyter.KernelLanguageInfo{
 			Name:          "go",
 			Version:       runtime.Version(),
 			FileExtension: ".go",
 		},
-		HelpLinks: []helpLink{
+		HelpLinks: []jupyter.KernelInfoHelpLink{
 			{Text: "Go", URL: "https://golang.org/"},
 			{Text: "gophernotes", URL: "https://github.com/gopherdata/gophernotes"},
 		},

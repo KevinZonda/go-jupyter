@@ -1,12 +1,12 @@
-package main
+package jupyter
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -44,7 +44,7 @@ func runTest(m *testing.M) int {
 	// Parse the connection info.
 	var connInfo ConnectionInfo
 
-	connData, err := ioutil.ReadFile(connectionFile)
+	connData, err := os.ReadFile(connectionFile)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -61,7 +61,21 @@ func runTest(m *testing.M) int {
 	iopubPort = connInfo.IOPubPort
 
 	// Start the kernel.
-	go RunKernel(connInfo)
+	go RunKernel(connInfo, KernelInfo{
+		ProtocolVersion:       ProtocolVersion,
+		Implementation:        "gophernotes",
+		ImplementationVersion: "1.0.0",
+		Banner:                fmt.Sprintf("Go kernel: gophernotes - v%s", "1.0.0"
+		LanguageInfo: KernelLanguageInfo{
+			Name:          "go",
+			Version:       runtime.Version(),
+			FileExtension: ".go",
+		},
+		HelpLinks: []KernelInfoHelpLink{
+			{Text: "Go", URL: "https://golang.org/"},
+			{Text: "gophernotes", URL: "https://github.com/gopherdata/gophernotes"},
+		},
+	})
 
 	return m.Run()
 }

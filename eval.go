@@ -1,8 +1,9 @@
-package main
+package jupyter
 
 import (
 	"errors"
 	"fmt"
+
 	"github.com/cosmos72/gomacro/ast2"
 	"github.com/cosmos72/gomacro/base"
 	basereflect "github.com/cosmos72/gomacro/base/reflect"

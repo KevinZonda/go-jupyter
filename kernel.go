@@ -1,4 +1,4 @@
-package main
+package jupyter
 
 import (
 	"bufio"
@@ -58,7 +58,7 @@ type SocketGroup struct {
 }
 
 // KernelLanguageInfo holds information about the language that this kernel executes code in.
-type kernelLanguageInfo struct {
+type KernelLanguageInfo struct {
 	Name              string `json:"name"`
 	Version           string `json:"version"`
 	MIMEType          string `json:"mimetype"`
@@ -69,19 +69,19 @@ type kernelLanguageInfo struct {
 }
 
 // HelpLink stores data to be displayed in the help menu of the notebook.
-type helpLink struct {
+type KernelInfoHelpLink struct {
 	Text string `json:"text"`
 	URL  string `json:"url"`
 }
 
 // KernelInfo holds information about the igo kernel, for kernel_info_reply messages.
 type KernelInfo struct {
-	ProtocolVersion       string             `json:"protocol_version"`
-	Implementation        string             `json:"implementation"`
-	ImplementationVersion string             `json:"implementation_version"`
-	LanguageInfo          kernelLanguageInfo `json:"language_info"`
-	Banner                string             `json:"banner"`
-	HelpLinks             []helpLink         `json:"help_links"`
+	ProtocolVersion       string               `json:"protocol_version"`
+	Implementation        string               `json:"implementation"`
+	ImplementationVersion string               `json:"implementation_version"`
+	LanguageInfo          KernelLanguageInfo   `json:"language_info"`
+	Banner                string               `json:"banner"`
+	HelpLinks             []KernelInfoHelpLink `json:"help_links"`
 }
 
 // shutdownReply encodes a boolean indication of shutdown/restart.

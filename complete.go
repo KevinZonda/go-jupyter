@@ -1,4 +1,4 @@
-package main
+package jupyter
 
 type Completion struct {
 	class,

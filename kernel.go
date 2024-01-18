@@ -358,13 +358,16 @@ func checkComplete(code string, ir *interp.Interp) (status, indent string) {
 	readline := base.MakeBufReadline(bufio.NewReader(strings.NewReader(code)))
 	for {
 		_, _, err := base.ReadMultiline(readline, base.ReadOptions(0), "")
+		if err == nil {
+			continue
+		}
 		if err == io.EOF {
 			return "complete", indent
-		} else if errors.Is(err, io.ErrUnexpectedEOF) {
-			return "incomplete", indent
-		} else if err != nil {
-			return "invalid", indent
 		}
+		if errors.Is(err, io.ErrUnexpectedEOF) {
+			return "incomplete", indent
+		}
+		return "invalid", indent
 	}
 }
 

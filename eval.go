@@ -30,10 +30,10 @@ func doEval(ir Interpreter, outerr OutErr, code string) (val []any, err error) {
 
 	// Evaluate the code.
 	results, err := ir.Eval(code)
-	if results != nil {
-		for _, result := range results {
-			fmt.Println(result)
-		}
-	}
+	//if results != nil {
+	//	for _, result := range results {
+	//		fmt.Println(result)
+	//	}
+	//}
 	return results, err
 }

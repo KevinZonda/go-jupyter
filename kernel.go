@@ -1,9 +1,7 @@
 package jupyter
 
 import (
-	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -14,8 +12,6 @@ import (
 	"time"
 
 	"github.com/go-zeromq/zmq4"
-
-	"github.com/cosmos72/gomacro/base"
 )
 
 // ProtocolVersion defines the Jupyter protocol version.
@@ -318,25 +314,26 @@ func sendKernelInfo(receipt msgReceipt, info KernelInfo) error {
 
 // checkComplete checks whether the `code` is complete or not.
 func checkComplete(code string) (status, indent string) {
-	status, indent = "unknown", ""
-
-	if len(code) == 0 {
-		return status, indent
-	}
-	readline := base.MakeBufReadline(bufio.NewReader(strings.NewReader(code)))
-	for {
-		_, _, err := base.ReadMultiline(readline, base.ReadOptions(0), "")
-		if err == nil {
-			continue
-		}
-		if err == io.EOF {
-			return "complete", indent
-		}
-		if errors.Is(err, io.ErrUnexpectedEOF) {
-			return "incomplete", indent
-		}
-		return "invalid", indent
-	}
+	return "complete", ""
+	//status, indent = "unknown", ""
+	//
+	//if len(code) == 0 {
+	//	return status, indent
+	//}
+	//readline := base.MakeBufReadline(bufio.NewReader(strings.NewReader(code)))
+	//for {
+	//	_, _, err := base.ReadMultiline(readline, base.ReadOptions(0), "")
+	//	if err == nil {
+	//		continue
+	//	}
+	//	if err == io.EOF {
+	//		return "complete", indent
+	//	}
+	//	if errors.Is(err, io.ErrUnexpectedEOF) {
+	//		return "incomplete", indent
+	//	}
+	//	return "invalid", indent
+	//}
 }
 
 // handleIsCompleteRequest sends a is_complete_reply message.

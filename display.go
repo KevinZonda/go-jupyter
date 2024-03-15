@@ -2,12 +2,10 @@ package jupyter
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
-	"image"
 	"io"
-	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -36,84 +34,17 @@ const (
  * Note that Data defined above is an alias:
  * libraries can implement Renderer without importing gophernotes
  */
-type Renderer = interface {
-	Render() Data
-}
-
-/**
- * simplified interface, allows libraries to specify
- * how their data is displayed by Jupyter.
- * Supports multiple MIME formats.
- *
- * Note that MIMEMap defined above is an alias:
- * libraries can implement SimpleRenderer without importing gophernotes
- */
-type SimpleRenderer = interface {
-	SimpleRender() MIMEMap
-}
-
-/**
- * specialized interfaces, each is dedicated to a specific MIME type.
- *
- * They are type aliases to emphasize that method signatures
- * are the only important thing, not the interface names.
- * Thus libraries can implement them without importing gophernotes
- */
-type HTMLer = interface {
-	HTML() string
-}
-type JavaScripter = interface {
-	JavaScript() string
-}
-type JPEGer = interface {
-	JPEG() []byte
-}
-type JSONer = interface {
-	JSON() map[string]interface{}
-}
-type Latexer = interface {
-	Latex() string
-}
-type Markdowner = interface {
-	Markdown() string
-}
-type PNGer = interface {
-	PNG() []byte
-}
-type PDFer = interface {
-	PDF() []byte
-}
-type SVGer = interface {
-	SVG() string
-}
-
-// injected as placeholder in the interpreter, it's then replaced at runtime
-// by a closure that knows how to talk with Jupyter
-func stubDisplay(Data) error {
-	return errors.New("cannot display: connection with Jupyter not available")
-}
 
 // if vals[] contain a single non-nil value which is auto-renderable,
 // convert it to Data and return it.
 // otherwise return MakeData("text/plain", fmt.Sprint(vals...))
 func (kernel *Kernel) autoRenderResults(vals []any) Data {
-	var nilcount int
-	var obj interface{}
 	for _, val := range vals {
-		if kernel.canAutoRender(val) {
-			obj = val
-		} else if val == nil {
-			nilcount++
+		if x, ok := val.(Data); ok {
+			return x
 		}
 	}
-	if obj != nil && nilcount == len(vals)-1 {
-		return kernel.autoRender("", obj)
-	}
-	if nilcount == len(vals) {
-		// if all values are nil, return empty Data
-		return Data{}
-	}
-	return MakeData(MIMETypeText, anyToString(vals...))
+	return Data{}
 }
 
 func anyToString(vals ...interface{}) string {
@@ -129,133 +60,17 @@ func anyToString(vals ...interface{}) string {
 
 // return true if data type should be auto-rendered graphically
 func (kernel *Kernel) canAutoRender(data interface{}) bool {
-	switch data.(type) {
-	case Data, Renderer, SimpleRenderer, HTMLer, JavaScripter, JPEGer, JSONer,
-		Latexer, Markdowner, PNGer, PDFer, SVGer, image.Image:
-		return true
-	}
-	//if kernel == nil {
-	//	return false
-	//}
-
-	// TODO: check
 	return true
-}
-
-var autoRenderers = map[string]func(Data, interface{}) Data{
-	"Renderer": func(d Data, i interface{}) Data {
-		if r, ok := i.(Renderer); ok {
-			x := r.Render()
-			d.Data = merge(d.Data, x.Data)
-			d.Metadata = merge(d.Metadata, x.Metadata)
-			d.Transient = merge(d.Transient, x.Transient)
-		}
-		return d
-	},
-	"SimpleRenderer": func(d Data, i interface{}) Data {
-		if r, ok := i.(SimpleRenderer); ok {
-			x := r.SimpleRender()
-			d.Data = merge(d.Data, x)
-		}
-		return d
-	},
-	"HTMLer": func(d Data, i interface{}) Data {
-		if r, ok := i.(HTMLer); ok {
-			d.Data = ensure(d.Data)
-			d.Data[MIMETypeHTML] = r.HTML()
-		}
-		return d
-	},
-	"JavaScripter": func(d Data, i interface{}) Data {
-		if r, ok := i.(JavaScripter); ok {
-			d.Data = ensure(d.Data)
-			d.Data[MIMETypeJavaScript] = r.JavaScript()
-		}
-		return d
-	},
-	"JPEGer": func(d Data, i interface{}) Data {
-		if r, ok := i.(JPEGer); ok {
-			d.Data = ensure(d.Data)
-			d.Data[MIMETypeJPEG] = r.JPEG()
-		}
-		return d
-	},
-	"JSONer": func(d Data, i interface{}) Data {
-		if r, ok := i.(JSONer); ok {
-			d.Data = ensure(d.Data)
-			d.Data[MIMETypeJSON] = r.JSON()
-		}
-		return d
-	},
-	"Latexer": func(d Data, i interface{}) Data {
-		if r, ok := i.(Latexer); ok {
-			d.Data = ensure(d.Data)
-			d.Data[MIMETypeLatex] = r.Latex()
-		}
-		return d
-	},
-	"Markdowner": func(d Data, i interface{}) Data {
-		if r, ok := i.(Markdowner); ok {
-			d.Data = ensure(d.Data)
-			d.Data[MIMETypeMarkdown] = r.Markdown()
-		}
-		return d
-	},
-	"PNGer": func(d Data, i interface{}) Data {
-		if r, ok := i.(PNGer); ok {
-			d.Data = ensure(d.Data)
-			d.Data[MIMETypePNG] = r.PNG()
-		}
-		return d
-	},
-	"PDFer": func(d Data, i interface{}) Data {
-		if r, ok := i.(PDFer); ok {
-			d.Data = ensure(d.Data)
-			d.Data[MIMETypePDF] = r.PDF()
-		}
-		return d
-	},
-	"SVGer": func(d Data, i interface{}) Data {
-		if r, ok := i.(SVGer); ok {
-			d.Data = ensure(d.Data)
-			d.Data[MIMETypeSVG] = r.SVG()
-		}
-		return d
-	},
-	"Image": func(d Data, i interface{}) Data {
-		if r, ok := i.(image.Image); ok {
-			b, mimeType, err := encodePng(r)
-			if err != nil {
-				d = makeDataErr(err)
-			} else {
-				d.Data = ensure(d.Data)
-				d.Data[mimeType] = b
-				d.Metadata = merge(d.Metadata, imageMetadata(r))
-			}
-		}
-		return d
-	},
 }
 
 // detect and render data types that should be auto-rendered graphically
 func (kernel *Kernel) autoRender(mimeType string, arg interface{}) Data {
-	var data Data
 	// try Data
 	if x, ok := arg.(Data); ok {
-		data = x
+		return x
 	}
 
-	if kernel == nil {
-		// try all autoRenderers
-		for _, fun := range autoRenderers {
-			data = fun(data, arg)
-		}
-	} else {
-		// TODO: Implement here
-		return fillDefaults(Data{}, arg, fmt.Sprint(arg), nil, "", nil)
-		//panic("IMPL")
-	}
-	return fillDefaults(data, arg, "", nil, "", nil)
+	return Data{}
 }
 
 func fillDefaults(data Data, arg interface{}, s string, b []byte, mimeType string, err error) Data {
@@ -356,7 +171,7 @@ func MakeData3(mimeType string, plaintext string, data interface{}) Data {
 }
 
 func File(mimeType string, path string) Data {
-	bytes, err := ioutil.ReadFile(path)
+	bytes, err := os.ReadFile(path)
 	if err != nil {
 		panic(err)
 	}

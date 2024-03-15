@@ -32,6 +32,9 @@ func doEval(ir Interpreter, outerr OutErr, code string) (val []any, err error) {
 	results, err := ir.Eval(code)
 	if results != nil {
 		for _, result := range results {
+			if _, ok := result.(Data); ok {
+				continue
+			}
 			fmt.Println(result)
 		}
 	}

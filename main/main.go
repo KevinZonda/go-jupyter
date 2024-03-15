@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -55,9 +56,22 @@ func (miniInterpreter) CompleteWords(code string, cursorPos int) (prefix string,
 }
 
 func (miniInterpreter) Eval(code string) (values []interface{}, err error) {
-	return []interface{}{code}, nil
+	bs, _ := os.ReadFile("/Users/kevin/Desktop/Felis_silvestris_silvestris_small_gradual_decrease_of_quality.png")
+
+	return []interface{}{
+		code,
+		jupyter.MakeData(jupyter.MIMETypePNG, bs),
+		jupyter.MakeData(jupyter.MIMETypeText, "Hello, world!"),
+		jupyter.MakeData(jupyter.MIMETypeHTML, "<h1>Hello, world!</h1>"),
+		jupyter.MakeData(jupyter.MIMETypePNG, b64(bs)),
+	}, nil
 }
 
 func (miniInterpreter) Close() error {
 	return nil
+}
+
+func b64(s []byte) string {
+	base := base64.StdEncoding.EncodeToString(s)
+	return base
 }
